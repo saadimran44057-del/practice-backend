@@ -6,17 +6,17 @@ import {
   updateProduct,
   deleteProduct,
 } from '../controllers/productController.js';
-
 import { protect } from '../middleware/auth.js';
+import { upload } from '../middleware/upload.js';
 
 const router = express.Router();
 
-router.use(protect);   // ← is ke neeche wale SAARE routes ab login maangenge
+router.use(protect);
 
-router.post('/', createProduct);
+router.post('/', upload.single('image'), createProduct);
 router.get('/', getProducts);
 router.get('/:id', getProductById);
-router.put('/:id', updateProduct);
+router.put('/:id', upload.single('image'), updateProduct);
 router.delete('/:id', deleteProduct);
 
 export default router;

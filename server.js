@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -12,8 +13,14 @@ const PORT = process.env.PORT || 8000;
 app.use(cors());
 app.use(express.json());
 
+app.use('/uploads', express.static('uploads'));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+
+app.use((err, req, res, next) => {
+  res.status(400).json({ status: false, message: err.message });
+});
 
 const startServer = async () => {
   await connectDB();
