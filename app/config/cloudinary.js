@@ -8,10 +8,10 @@ cloudinary.config({
 });
 
 // Image (buffer) ko Cloudinary par upload karo
-export const uploadImage = (buffer) => {
+export const uploadImage = (buffer, folder = 'practice-products') => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder: 'practice-products' },
+      { folder },
       (error, result) => {
         if (error) return reject(error);
         resolve({ url: result.secure_url, publicId: result.public_id });
