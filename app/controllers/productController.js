@@ -1,9 +1,21 @@
 import { Op } from 'sequelize';
 import Product from '../models/product.js';
+import User from '../models/user.js';
 import { handleError } from '../utils/handleError.js';
 import { deleteFile } from '../utils/deleteFile.js';
+import { uploadImage, deleteImage } from '../config/cloudinary.js';
 
-const imagePath = (file) => (file ? `/uploads/${file.filename}` : null);
+// Admin ko sab, user ko sirf apne
+const ownerFilter = (user) => (user.role === 'admin' ? {} : { userId: user.id });
+
+// Purani image hatao: Cloudinary wali ho to wahan se, purani local ho to folder se
+const removeImage = async (image, publicId) => {
+  if (publicId) {
+    await deleteImage(publicId);
+  } else if (image && image.startsWith('/uploads/')) {
+    deleteFile(image);
+  }
+};
 
 // CREATE
 export const createProduct = async (req, res) => {
@@ -16,15 +28,27 @@ export const createProduct = async (req, res) => {
       return res.status(201).json({ status: true, count: products.length, data: products });
     }
 
-    const product = await Product.create({
-      ...req.body,
-      userId,
-      image: imagePath(req.file),
-    });
+    const { id, image, imagePublicId, ...data } = req.body;
+    const product = Product.build({ ...data, userId });
+
+    // Pehle validation, taake ghalat data par image upload hi na ho
+    await product.validate();
+
+    if (req.file) {
+      const uploaded = await uploadImage(req.file.buffer);
+      product.image = uploaded.url;
+      product.imagePublicId = uploaded.publicId;
+    }
+
+    try {
+      await product.save();
+    } catch (error) {
+      await deleteImage(product.imagePublicId);
+      throw error;
+    }
 
     res.status(201).json({ status: true, data: product });
   } catch (error) {
-    if (req.file) deleteFile(imagePath(req.file));
     handleError(res, error);
   }
 };
@@ -38,7 +62,7 @@ export const getProducts = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 50);
     const offset = (page - 1) * limit;
 
-    const where = { userId: req.user.id };
+    const where = { ...ownerFilter(req.user) };
 
     if (search) {
       where.name = { [Op.iLike]: `%${search}%` };
@@ -54,8 +78,13 @@ export const getProducts = async (req, res) => {
     const sortField = allowedSort.includes(sortBy) ? sortBy : 'createdAt';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
+    const include = req.user.role === 'admin'
+      ? [{ model: User, attributes: ['id', 'name', 'email'] }]
+      : [];
+
     const { count, rows } = await Product.findAndCountAll({
       where,
+      include,
       order: [[sortField, sortOrder]],
       limit,
       offset,
@@ -75,7 +104,7 @@ export const getProducts = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, ...ownerFilter(req.user) },
     });
     if (!product) {
       return res.status(404).json({ status: false, message: 'Product not found' });
@@ -90,28 +119,38 @@ export const getProductById = async (req, res) => {
 export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, ...ownerFilter(req.user) },
     });
 
     if (!product) {
-      if (req.file) deleteFile(imagePath(req.file));
       return res.status(404).json({ status: false, message: 'Product not found' });
     }
 
-    const { userId, id, image, ...data } = req.body;
+    const { userId, id, image, imagePublicId, ...data } = req.body;
+    product.set(data);
+    await product.validate();
 
     const oldImage = product.image;
+    const oldPublicId = product.imagePublicId;
+
     if (req.file) {
-      data.image = imagePath(req.file);
+      const uploaded = await uploadImage(req.file.buffer);
+      product.image = uploaded.url;
+      product.imagePublicId = uploaded.publicId;
     }
 
-    await product.update(data);
+    try {
+      await product.save();
+    } catch (error) {
+      if (req.file) await deleteImage(product.imagePublicId);
+      throw error;
+    }
 
-    if (req.file && oldImage) deleteFile(oldImage);
+    // Nayi image save ho gayi, ab purani hatao
+    if (req.file) await removeImage(oldImage, oldPublicId);
 
     res.status(200).json({ status: true, message: 'Product updated', data: product });
   } catch (error) {
-    if (req.file) deleteFile(imagePath(req.file));
     handleError(res, error);
   }
 };
@@ -120,7 +159,7 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, userId: req.user.id },
+      where: { id: req.params.id, ...ownerFilter(req.user) },
     });
 
     if (!product) {
@@ -128,7 +167,7 @@ export const deleteProduct = async (req, res) => {
     }
 
     await product.destroy();
-    deleteFile(product.image);
+    await removeImage(product.image, product.imagePublicId);
 
     res.status(200).json({ status: true, message: 'Product deleted' });
   } catch (error) {

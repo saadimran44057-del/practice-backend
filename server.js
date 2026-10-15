@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -6,6 +5,7 @@ import { sequelize, connectDB } from './app/config/connection.js';
 import './app/models/index.js';
 import authRoutes from './app/routes/authRoutes.js';
 import productRoutes from './app/routes/productRoutes.js';
+import userRoutes from './app/routes/userRoutes.js';
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -17,6 +17,7 @@ app.use('/uploads', express.static('uploads'));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/users', userRoutes);
 
 app.use((err, req, res, next) => {
   res.status(400).json({ status: false, message: err.message });
