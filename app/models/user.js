@@ -29,6 +29,20 @@ const User = sequelize.define('User', {
     allowNull: false,
     defaultValue: 'user',
   },
+  // Forgot password ke liye
+  resetOtp: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  resetOtpExpires: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  resetOtpAttempts: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+  },
 }, {
   tableName: 'users',
   timestamps: true,

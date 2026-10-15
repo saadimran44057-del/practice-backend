@@ -7,7 +7,7 @@ import { handleError } from '../utils/handleError.js';
 export const getUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: { exclude: ['password'] },
+      attributes: { exclude: ['password', 'resetOtp', 'resetOtpExpires', 'resetOtpAttempts'] },
       order: [['id', 'ASC']],
     });
 
