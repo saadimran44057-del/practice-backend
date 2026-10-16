@@ -1,7 +1,8 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
+import { User, Role } from '../models/index.js';
+import { publicUser } from '../utils/publicUser.js';
 import { handleError } from '../utils/handleError.js';
 import { sendEmail } from '../utils/sendEmail.js';
 
@@ -14,13 +15,7 @@ const createToken = (userId) => {
   });
 };
 
-const publicUser = (user) => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  avatar: user.avatar,
-});
+
 
 // SIGNUP
 export const signup = async (req, res) => {
@@ -33,8 +28,11 @@ export const signup = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // role body se nahi lete, warna koi bhi khud ko admin bana leta
-    const user = await User.create({ name, email, password: hashedPassword });
+        // New accounts always get the normal 'user' role.
+    // Never take the role from req.body, or anyone could make themselves admin.
+    const userRole = await Role.findOne({ where: { name: 'user' } });
+    const user = await User.create({ name, email, password: hashedPassword, roleId: userRole.id });
+    await user.reload({ include: [Role] });
 
     res.status(201).json({
       status: true,
@@ -56,10 +54,14 @@ export const login = async (req, res) => {
       return res.status(400).json({ status: false, message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ where: { email }, include: [Role] });
 
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ status: false, message: 'Invalid email or password' });
+    }
+    
+    if (user.isBlocked) {
+      return res.status(403).json({ status: false, message: 'Your account has been blocked. Contact support.' });
     }
 
     res.status(200).json({

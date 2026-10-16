@@ -5,10 +5,11 @@ import { handleError } from '../utils/handleError.js';
 import { deleteFile } from '../utils/deleteFile.js';
 import { uploadImage, deleteImage } from '../config/cloudinary.js';
 
-// Admin ko sab, user ko sirf apne
-const ownerFilter = (user) => (user.role === 'admin' ? {} : { userId: user.id });
+// With this permission the user can reach every product, otherwise only their own
+const scopeFor = (user, permission) =>
+  user.permissions.includes(permission) ? {} : { userId: user.id };
 
-// Purani image hatao: Cloudinary wali ho to wahan se, purani local ho to folder se
+// Remove an old image: from Cloudinary if it has a publicId, otherwise from the local uploads folder
 const removeImage = async (image, publicId) => {
   if (publicId) {
     await deleteImage(publicId);
@@ -28,10 +29,10 @@ export const createProduct = async (req, res) => {
       return res.status(201).json({ status: true, count: products.length, data: products });
     }
 
-    const { id, image, imagePublicId, ...data } = req.body;
+    const { id, image, imagePublicId, isBlocked, ...data } = req.body;
     const product = Product.build({ ...data, userId });
 
-    // Pehle validation, taake ghalat data par image upload hi na ho
+    // Validate first, so we don't upload an image for invalid data
     await product.validate();
 
     if (req.file) {
@@ -62,7 +63,7 @@ export const getProducts = async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 50);
     const offset = (page - 1) * limit;
 
-    const where = { ...ownerFilter(req.user) };
+    const where = { ...scopeFor(req.user, 'products.view') };
 
     if (search) {
       where.name = { [Op.iLike]: `%${search}%` };
@@ -78,7 +79,7 @@ export const getProducts = async (req, res) => {
     const sortField = allowedSort.includes(sortBy) ? sortBy : 'createdAt';
     const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
 
-    const include = req.user.role === 'admin'
+    const include = req.user.permissions.includes('products.view')
       ? [{ model: User, attributes: ['id', 'name', 'email'] }]
       : [];
 
@@ -104,7 +105,7 @@ export const getProducts = async (req, res) => {
 export const getProductById = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, ...ownerFilter(req.user) },
+      where: { id: req.params.id, ...scopeFor(req.user, 'products.view') },
     });
     if (!product) {
       return res.status(404).json({ status: false, message: 'Product not found' });
@@ -119,14 +120,17 @@ export const getProductById = async (req, res) => {
 export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, ...ownerFilter(req.user) },
+      where: { id: req.params.id, ...scopeFor(req.user, 'products.edit') },
     });
-
     if (!product) {
       return res.status(404).json({ status: false, message: 'Product not found' });
     }
 
-    const { userId, id, image, imagePublicId, ...data } = req.body;
+    if (product.isBlocked && !req.user.permissions.includes('products.edit')) {
+      return res.status(403).json({ status: false, message: 'This product was blocked by an admin and cannot be edited' });
+    }
+
+    const { userId, id, image, imagePublicId, isBlocked, ...data } = req.body;
     product.set(data);
     await product.validate();
 
@@ -146,7 +150,7 @@ export const updateProduct = async (req, res) => {
       throw error;
     }
 
-    // Nayi image save ho gayi, ab purani hatao
+    // New image is saved, now remove the old one
     if (req.file) await removeImage(oldImage, oldPublicId);
 
     res.status(200).json({ status: true, message: 'Product updated', data: product });
@@ -159,7 +163,7 @@ export const updateProduct = async (req, res) => {
 export const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findOne({
-      where: { id: req.params.id, ...ownerFilter(req.user) },
+      where: { id: req.params.id, ...scopeFor(req.user, 'products.delete') },
     });
 
     if (!product) {

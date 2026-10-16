@@ -1,72 +1,30 @@
-import { sequelize } from '../config/connection.js';
-import User from '../models/user.js';
-import Product from '../models/product.js';
+import { User, Role } from '../models/index.js';
 import { handleError } from '../utils/handleError.js';
 import { uploadImage, deleteImage } from '../config/cloudinary.js';
+import { publicUser } from '../utils/publicUser.js';
 
-const profileFields = ['id', 'name', 'email', 'role', 'avatar', 'createdAt'];
-
-const publicProfile = (user) => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  avatar: user.avatar,
-  createdAt: user.createdAt,
-});
-
-// Sirf admin: saare users aur un ke products ki ginti
-export const getUsers = async (req, res) => {
-  try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password', 'resetOtp', 'resetOtpExpires', 'resetOtpAttempts', 'avatarPublicId'] },
-      order: [['id', 'ASC']],
-    });
-
-    const counts = await Product.findAll({
-      attributes: ['userId', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
-      group: ['userId'],
-      raw: true,
-    });
-
-    const countMap = {};
-    counts.forEach((c) => {
-      countMap[c.userId] = Number(c.count);
-    });
-
-    const data = users.map((u) => ({
-      ...u.toJSON(),
-      productCount: countMap[u.id] || 0,
-    }));
-
-    res.status(200).json({ status: true, count: data.length, data });
-  } catch (error) {
-    handleError(res, error);
-  }
-};
-
-// MERA PROFILE: login wala user apni details dekhe
+// MY PROFILE: the logged-in user sees their own details
 export const getMe = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id, { attributes: profileFields });
+    const user = await User.findByPk(req.user.id, { include: [Role] });
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
-    res.status(200).json({ status: true, user: publicProfile(user) });
+    res.status(200).json({ status: true, user: publicUser(user) });
   } catch (error) {
     handleError(res, error);
   }
 };
 
-// PROFILE UPDATE: naam aur profile picture
+// PROFILE UPDATE: name and profile picture
 export const updateMe = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.id, { include: [Role] });
     if (!user) {
       return res.status(404).json({ status: false, message: 'User not found' });
     }
 
-    // Sirf naam badal sakte hain. Email, role, password yahan se nahi
+    // Only the name can change here. Not email, role or password
     const { name, removeAvatar } = req.body;
     if (name !== undefined) {
       user.name = name.trim();
@@ -76,12 +34,12 @@ export const updateMe = async (req, res) => {
     const oldPublicId = user.avatarPublicId;
 
     if (req.file) {
-      // Nayi photo upload
+      // Upload the new photo
       const uploaded = await uploadImage(req.file.buffer, 'practice-avatars');
       user.avatar = uploaded.url;
       user.avatarPublicId = uploaded.publicId;
     } else if (removeAvatar === 'true') {
-      // Photo hatani hai
+      // Remove the photo
       user.avatar = null;
       user.avatarPublicId = null;
     }
@@ -93,12 +51,12 @@ export const updateMe = async (req, res) => {
       throw error;
     }
 
-    // Purani photo Cloudinary se hatao
+    // Delete the old photo from Cloudinary
     if ((req.file || removeAvatar === 'true') && oldPublicId) {
       await deleteImage(oldPublicId);
     }
 
-    res.status(200).json({ status: true, message: 'Profile updated', user: publicProfile(user) });
+    res.status(200).json({ status: true, message: 'Profile updated', user: publicUser(user) });
   } catch (error) {
     handleError(res, error);
   }

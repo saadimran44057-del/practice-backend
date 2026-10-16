@@ -32,12 +32,18 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-  role: {
-    type: DataTypes.ENUM('user', 'admin'),
+    // Which role this user has (links to the roles table)
+    roleId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+  // Admin can block a user
+  isBlocked: {
+    type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: 'user',
+    defaultValue: false,
   },
-  // Forgot password ke liye
+  // Used by forgot / reset password
   resetOtp: {
     type: DataTypes.STRING,
     allowNull: true,

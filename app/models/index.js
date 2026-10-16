@@ -1,15 +1,12 @@
 import User from './user.js';
 import Product from './product.js';
+import Role from './role.js';
 
-// Ek user ke kai products
-User.hasMany(Product, {
-  foreignKey: { name: 'userId', allowNull: false },
-  onDelete: 'CASCADE',
-});
+User.hasMany(Product, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Product.belongsTo(User, { foreignKey: 'userId' });
 
-// Har product ek user ka
-Product.belongsTo(User, {
-  foreignKey: { name: 'userId', allowNull: false },
-});
+// A role has many users. A role that still has users can't be deleted
+Role.hasMany(User, { foreignKey: 'roleId', onDelete: 'RESTRICT' });
+User.belongsTo(Role, { foreignKey: 'roleId' });
 
-export { User, Product };
+export { User, Product, Role };

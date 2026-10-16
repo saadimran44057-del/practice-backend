@@ -1,7 +1,8 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
+import { User, Role } from '../models/index.js';
+import { permissionsForRole, isAdminRole } from '../config/permissions.js';
 
-// Login check
+// Only logged-in, non-blocked users get through
 export const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -20,23 +21,37 @@ export const protect = async (req, res, next) => {
 
   try {
     const user = await User.findByPk(decoded.id, {
-      attributes: ['id', 'name', 'email', 'role'],
+      attributes: ['id', 'name', 'email', 'isBlocked', 'roleId'],
+      include: Role,
     });
 
     if (!user) {
       return res.status(401).json({ status: false, message: 'User no longer exists' });
     }
 
-    req.user = { id: user.id, role: user.role };
+    if (user.isBlocked) {
+      return res.status(403).json({ status: false, message: 'Your account has been blocked. Contact support.' });
+    }
+
+    // Read fresh from the database on every request,
+    // so role changes work without logging in again
+    req.user = {
+      id: user.id,
+      roleId: user.roleId,
+      isAdmin: isAdminRole(user.Role),
+      permissions: permissionsForRole(user.Role),
+    };
     next();
   } catch (error) {
     return res.status(500).json({ status: false, message: error.message });
   }
 };
 
-// Role check: sirf in roles ko jane do
-export const authorize = (...roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
+// Let the request through if the user has ANY of these permissions
+// e.g. requirePermission('users.view')
+export const requirePermission = (...permissions) => (req, res, next) => {
+  const allowed = permissions.some((p) => req.user.permissions.includes(p));
+  if (!allowed) {
     return res.status(403).json({ status: false, message: 'You do not have permission' });
   }
   next();
