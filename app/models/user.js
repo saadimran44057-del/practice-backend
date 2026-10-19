@@ -32,11 +32,22 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true,
   },
-    // Which role this user has (links to the roles table)
-    roleId: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-    },
+  // Which role this user has (links to the roles table)
+  roleId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+  },
+  // Set when the user signs in with Google (Google's id for this person)
+  googleId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true,
+  },
+  // Delivery address saved at checkout, to fill the form next time
+  savedAddress: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+  },
   // Admin can block a user
   isBlocked: {
     type: DataTypes.BOOLEAN,

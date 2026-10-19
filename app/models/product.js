@@ -39,7 +39,25 @@ const Product = sequelize.define('Product', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+
+  // How many are available to sell. POS sales lower this
+  stock: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0,
+    validate: {
+      isInt: { msg: 'Stock must be a whole number' },
+      min: { args: [0], msg: 'Stock cannot be negative' },
+    },
+  },
+
+    // Delivery address saved at checkout, to fill the form next time
+    savedAddress: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
   // Admin can block a product
+  
   isBlocked: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
@@ -51,3 +69,4 @@ const Product = sequelize.define('Product', {
 });
 
 export default Product;
+

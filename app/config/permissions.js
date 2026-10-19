@@ -13,7 +13,9 @@ export const PERMISSIONS = [
     { key: 'products.block', label: 'Block and unblock products', group: 'Products' },
     { key: 'products.edit', label: "Edit anyone's products", group: 'Products' },
     { key: 'products.delete', label: "Delete anyone's products", group: 'Products' },
-  
+    { key: 'orders.view', label: "View everyone's shop orders", group: 'Orders' },
+    { key: 'orders.manage', label: "Update the status of anyone's orders", group: 'Orders' },
+    { key: 'sales.view', label: "View everyone's sales", group: 'Sales' },
     { key: 'roles.manage', label: 'Create, edit and delete roles', group: 'Roles' },
   ];
   

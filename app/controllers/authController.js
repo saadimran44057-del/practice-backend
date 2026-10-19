@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { User, Role } from '../models/index.js';
 import { publicUser } from '../utils/publicUser.js';
@@ -74,6 +75,81 @@ export const login = async (req, res) => {
     handleError(res, error);
   }
 };
+
+
+// SIGN IN WITH GOOGLE
+// The frontend sends the "credential" (an ID token) that Google gave the browser.
+// We ask Google's library to check it, then log the person in or create their account.
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+export const googleLogin = async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ status: false, message: 'Google credential is required' });
+    }
+
+    // Throws if the token is fake, expired, or made for another app
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch (error) {
+      return res.status(401).json({ status: false, message: 'Google sign-in failed. Please try again.' });
+    }
+
+    if (!payload.email || !payload.email_verified) {
+      return res.status(401).json({ status: false, message: 'Your Google email is not verified' });
+    }
+
+    const email = payload.email.toLowerCase();
+
+    // 1. Already signed in with Google before?  2. Or an account with the same email?
+    let user = await User.findOne({ where: { googleId: payload.sub }, include: [Role] });
+    if (!user) {
+      user = await User.findOne({ where: { email }, include: [Role] });
+    }
+
+    if (user) {
+      if (user.isBlocked) {
+        return res.status(403).json({ status: false, message: 'Your account has been blocked. Contact support.' });
+      }
+      // Link Google to the existing account, and use the Google photo if there is none
+      if (!user.googleId) user.googleId = payload.sub;
+      if (!user.avatar && payload.picture) user.avatar = payload.picture;
+      await user.save();
+    } else {
+      // New person: create an account with the normal 'user' role.
+      // They have no password yet, so store a random one. They can set a real one
+      // later with "Forgot password".
+      const userRole = await Role.findOne({ where: { name: 'user' } });
+      const randomPassword = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10);
+      user = await User.create({
+        name: payload.name || email.split('@')[0],
+        email,
+        password: randomPassword,
+        googleId: payload.sub,
+        avatar: payload.picture || null,
+        roleId: userRole.id,
+      });
+      await user.reload({ include: [Role] });
+    }
+
+    res.status(200).json({
+      status: true,
+      message: 'Login successful',
+      token: createToken(user.id),
+      user: publicUser(user),
+    });
+  } catch (error) {
+    handleError(res, error);
+  }
+};
+
+
 
 // FORGOT PASSWORD: email par 6 digit OTP bhejo
 export const forgotPassword = async (req, res) => {

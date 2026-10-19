@@ -69,6 +69,17 @@ export const getProducts = async (req, res) => {
       where.name = { [Op.iLike]: `%${search}%` };
     }
 
+    // ?mine=true: only my own products (the POS uses this, even for admins)
+    if (req.query.mine === 'true') {
+      where.userId = req.user.id;
+    }
+
+    // ?inStock=true: only products that can be sold right now
+    if (req.query.inStock === 'true') {
+      where.stock = { [Op.gt]: 0 };
+      where.isBlocked = false;
+    }
+
     if (minPrice || maxPrice) {
       where.price = {};
       if (minPrice) where.price[Op.gte] = Number(minPrice);
